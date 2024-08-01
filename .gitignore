@@ -180,3 +180,4 @@ include/
 *.pyw
 *.csv
 share/
+output/

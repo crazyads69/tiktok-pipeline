@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  tiktok-crawler:
+    build: .
+    volumes:
+      - ./.env:/app/.env
+      - ./output:/app/output # Mount a volume for the output file
+    tty: true
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+    command: ["python", "crawl_data.py"]
+    stdin_open: true

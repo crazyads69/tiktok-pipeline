@@ -61,8 +61,12 @@ async def get_trending():
 
 
 async def save_trending(video_trending):
-    filename = "trending.json"
-    temp_filename = f"trending_temp_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
+    # Change the filename to use the output folder
+    output_folder = "/app/output"  # Path to the mounted output folder
+    filename = os.path.join(output_folder, "trending.json")
+    temp_filename = os.path.join(
+        output_folder, f"trending_temp_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
+    )
 
     try:
         if os.path.exists(filename):
