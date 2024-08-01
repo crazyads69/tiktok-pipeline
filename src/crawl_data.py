@@ -30,7 +30,7 @@ async def get_trending():
             video_trending = []
             try:
                 async for video in api.trending.videos(count=batch_size, cursor=cursor):
-                    video_trending.append(video.as_dict())
+                    video_trending.append(video.as_dict)
                     video_count += 1
                     if video_count >= max_videos:
                         break

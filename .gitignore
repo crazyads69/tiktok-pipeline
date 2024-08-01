@@ -178,3 +178,4 @@ include/
 *.pyd
 *.pyz
 *.pyw
+*.csv
