@@ -179,3 +179,4 @@ include/
 *.pyz
 *.pyw
 *.csv
+share/
