@@ -1,4 +1,3 @@
-from TikTokApi import TikTokApi
 import asyncio
 import os
 import dotenv
@@ -6,6 +5,8 @@ import json
 import aiofiles
 import random
 from datetime import datetime
+from TikTokApi import TikTokApi
+from matplotlib.pylab import rand
 
 dotenv.load_dotenv()
 
@@ -14,28 +15,62 @@ if not ms_token:
     raise ValueError("MS_TOKEN not found in environment variables")
 print(ms_token)
 
-max_videos = 15000  # Number of videos to collect from TikTok trending
-batch_size = 30  # Number of videos to collect per request
-min_delay = 20  # Minimum delay in seconds between batches
-max_delay = 40  # Maximum delay in seconds between batches
+max_videos = 50000  # Reduced number of videos to collect
+batch_size = 30  # Reduced batch size
+min_delay = 30  # Increased minimum delay
+max_delay = 60  # Increased maximum delay
+
+# List of user agents to rotate through
+user_agents = [
+    # Windows Browsers
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko",
+    # macOS Browsers
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:89.0) Gecko/20100101 Firefox/89.0",
+    # Linux Browsers
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36",
+    # iOS Devices
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (iPad; CPU OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (iPod touch; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
+    # Android Devices
+    "Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 11; SM-T870) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Safari/537.36",
+    "Mozilla/5.0 (Android 11; Mobile; rv:68.0) Gecko/68.0 Firefox/88.0",
+    # Other Browsers
+    "Mozilla/5.0 (X11; CrOS x86_64 13904.77.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36",
+    "Opera/9.80 (Windows NT 6.1; WOW64) Presto/2.12.388 Version/12.18",
+    "Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.2; Trident/6.0)",
+]
 
 
 async def get_trending():
     video_count = 0
     unique_video_ids = set()
     async with TikTokApi() as api:
-        try:
-            await api.create_sessions(
-                ms_tokens=[ms_token], num_sessions=1, sleep_after=3  # type: ignore
-            )
-        except Exception as e:
-            print(f"Failed to create API session: {e}")
-            return
-
         while video_count < max_videos:
             video_trending = []
             try:
-                trending_videos = api.trending.videos(count=batch_size)
+                # Rotate user agents
+                context_options = {
+                    "viewport": {"width": 1280, "height": 1024},
+                    "user_agent": random.choice(user_agents),
+                }
+                await api.create_sessions(
+                    ms_tokens=[ms_token],  # type: ignore
+                    num_sessions=1,
+                    sleep_after=3,
+                    context_options=context_options,
+                )
+
+                trending_videos = api.trending.videos(
+                    count=random.randint(10, batch_size)
+                )
                 async for video in trending_videos:  # type: ignore
                     if video.id not in unique_video_ids:
                         video_trending.append(video.as_dict)
@@ -48,7 +83,7 @@ async def get_trending():
                     break
             except Exception as e:
                 print(f"Error fetching trending videos: {e}")
-                await asyncio.sleep(60)  # Wait longer if an error occurs
+                await asyncio.sleep(120)  # Longer wait on error
                 continue
 
             await save_trending(video_trending)
