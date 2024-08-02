@@ -6,7 +6,6 @@ import aiofiles
 import random
 from datetime import datetime
 from TikTokApi import TikTokApi
-import pandas as pd
 
 dotenv.load_dotenv()
 
@@ -14,18 +13,6 @@ ms_token = os.getenv("MS_TOKEN")
 if not ms_token:
     raise ValueError("MS_TOKEN not found in environment variables")
 print(ms_token)
-
-# read the proxy_list.csv file
-proxy_list = pd.read_csv("proxy_list.csv")
-
-# Filter only get protocol proxies that http
-http_proxies = proxy_list[proxy_list["protocol"] == "http"]
-
-# Get the ip and port columns from the http_proxies DataFrame and create a list of proxy URLs
-proxy_urls = [
-    f"http://{row['ip']}:{row['port']}" for index, row in http_proxies.iterrows()
-]
-
 
 max_videos = 50000  # Reduced number of videos to collect
 batch_size = 30  # Reduced batch size
@@ -78,7 +65,7 @@ async def get_trending():
                     num_sessions=1,
                     sleep_after=3,
                     context_options=context_options,
-                    proxies=proxy_urls,
+                    # proxies=proxy_urls,
                 )
 
                 trending_videos = api.trending.videos(
