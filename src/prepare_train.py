@@ -27,7 +27,7 @@ def process_data(df):
 
 
 if __name__ == "__main__":
-    df = load_data("processed_trending.json")
+    df = load_data("output/processed_trending.json")
     print("Original DataFrame:")
     print(df.head())
     print(df.info())

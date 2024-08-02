@@ -150,7 +150,7 @@ def process_data(data: list) -> list:
 
 
 if __name__ == "__main__":
-    data = load_json("trending.json")
+    data = load_json("output/trending.json")
     processed_data = process_data(data)
     # Save the processed data to a new file
     with open("processed_trending.json", "w") as f:
