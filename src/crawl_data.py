@@ -6,18 +6,25 @@ import aiofiles
 import random
 from datetime import datetime
 from TikTokApi import TikTokApi
+import logging
+import aiosqlite
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 dotenv.load_dotenv()
 
 ms_token = os.getenv("MS_TOKEN")
 if not ms_token:
     raise ValueError("MS_TOKEN not found in environment variables")
-print(ms_token)
 
 max_videos = 50000  # Reduced number of videos to collect
-batch_size = 30  # Reduced batch size
-min_delay = 30  # Increased minimum delay
-max_delay = 60  # Increased maximum delay
+batch_size = 5  # Reduced batch size
+db_path = "tiktok_videos.db"
+delay_between_batches = 30  # Delay in seconds between batches
+max_retries = 3  # Maximum number of retries for API calls
 
 # List of user agents to rotate through
 user_agents = [
@@ -48,14 +55,37 @@ user_agents = [
 ]
 
 
+async def init_db():
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS videos (
+                id TEXT PRIMARY KEY,
+                data TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """
+        )
+        await db.commit()
+
+
+async def save_to_db(videos):
+    async with aiosqlite.connect(db_path) as db:
+        for video in videos:
+            await db.execute(
+                "INSERT OR REPLACE INTO videos (id, data) VALUES (?, ?)",
+                (video["id"], json.dumps(video)),
+            )
+        await db.commit()
+
+
 async def get_trending():
     video_count = 0
-    unique_video_ids = set()
+    retry_count = 0
     async with TikTokApi() as api:
         while video_count < max_videos:
             video_trending = []
             try:
-                # Rotate user agents
                 context_options = {
                     "viewport": {"width": 1280, "height": 1024},
                     "user_agent": random.choice(user_agents),
@@ -65,71 +95,51 @@ async def get_trending():
                     num_sessions=1,
                     sleep_after=3,
                     context_options=context_options,
-                    # proxies=proxy_urls,
                 )
 
-                trending_videos = api.trending.videos(
-                    count=random.randint(10, batch_size)
-                )
+                trending_videos = api.trending.videos(count=batch_size)
                 async for video in trending_videos:  # type: ignore
-                    if video.id not in unique_video_ids:
-                        video_trending.append(video.as_dict)
-                        unique_video_ids.add(video.id)
-                        video_count += 1
-                        if video_count >= max_videos:
-                            break
+                    video_trending.append(video.as_dict)
+                    video_count += 1
+                    if video_count >= max_videos:
+                        break
                 if not video_trending:
-                    print("No more videos returned by the API, exiting...")
+                    logging.info("No more videos returned by the API, exiting...")
                     break
+
+                await save_to_db(video_trending)
+                logging.info(f"Videos collected: {video_count}")
+
+                # Reset retry count on successful API call
+                retry_count = 0
+
+                # Delay between batches to avoid rate limiting
+                logging.info(
+                    f"Waiting for {delay_between_batches} seconds before next batch..."
+                )
+                await asyncio.sleep(delay_between_batches)
+
             except Exception as e:
-                print(f"Error fetching trending videos: {e}")
-                await asyncio.sleep(120)  # Longer wait on error
-                continue
+                retry_count += 1
+                if retry_count > max_retries:
+                    logging.error(
+                        f"Max retries reached. Exiting script. Last error: {e}"
+                    )
+                    break
+                logging.error(
+                    f"Error fetching trending videos (attempt {retry_count}/{max_retries}): {e}"
+                )
+                wait_time = (
+                    delay_between_batches * retry_count
+                )  # Increasing wait time with each retry
+                logging.info(f"Waiting for {wait_time} seconds before retrying...")
+                await asyncio.sleep(wait_time)
 
-            await save_trending(video_trending)
-            print(f"Videos collected: {video_count}")
 
-            # Add randomized delay between batches
-            delay = random.uniform(min_delay, max_delay)
-            print(f"Waiting for {delay:.2f} seconds before fetching the next batch...")
-            await asyncio.sleep(delay)
-
-
-async def save_trending(video_trending):
-    # Change the filename to use the output folder
-    output_folder = "output/"  # Path to the mounted output folder
-    filename = os.path.join(output_folder, "trending.json")
-    temp_filename = os.path.join(
-        output_folder, f"trending_temp_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
-    )
-
-    try:
-        if os.path.exists(filename):
-            async with aiofiles.open(filename, "r") as f:
-                content = await f.read()
-                existing_data = json.loads(content)
-        else:
-            existing_data = []
-    except json.JSONDecodeError:
-        print("Error decoding JSON from trending.json, starting with an empty list")
-        existing_data = []
-    except FileNotFoundError:
-        existing_data = []
-
-    # Check for duplicates and append new data
-    existing_ids = set(video["id"] for video in existing_data)
-    new_videos = [video for video in video_trending if video["id"] not in existing_ids]
-    existing_data.extend(new_videos)
-
-    # Write updated data to a temporary file
-    try:
-        async with aiofiles.open(temp_filename, "w") as f:
-            await f.write(json.dumps(existing_data, indent=4))
-        # Rename the temporary file to the actual filename
-        os.replace(temp_filename, filename)
-    except Exception as e:
-        print(f"Error writing to {filename}: {e}")
+async def main():
+    await init_db()
+    await get_trending()
 
 
 if __name__ == "__main__":
-    asyncio.run(get_trending())
+    asyncio.run(main())
